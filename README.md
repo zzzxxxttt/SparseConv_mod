@@ -12,18 +12,18 @@ https://github.com/traveller59/spconv/blob/master/README.md
 Just add ```version = "mod1"``` or  ```version = "mod2"```to the subM convolution function.    
 ```Python
 import spconv
-layer = spconv.SparseConv3d(in_channels = 1,
-                            out_channels=32,
-                            kernel_size=3,
-                            stride = 1,
-                            padding = 1,
-                            use_hash = False,
-                            version='mod1') # or "mod2"
+layer = spconv.SubMConv3d(in_channels = 1,
+                          out_channels=32,
+                          kernel_size=3,
+                          stride = 1,
+                          padding = 1,
+                          use_hash = False,
+                          version='mod1') # or "mod2"
 ```
 
 #### notice
 1. only support subM convolution
-2. the```algo```parameter needs to be ```ConvAlgo.Native``` 
+2. the```algo```parameter needs to be ```ConvAlgo.Native``` (default)
 
 ## Comparison
 
