@@ -32,5 +32,6 @@ static auto registry =
         .op("spconv::pillar_scatter_float", &spconv::pointPillarScatter<float>)
         .op("spconv::pillar_scatter_half", &spconv::pointPillarScatter<at::Half>)
         .op("spconv::get_indice_pairs_mod", &spconv::getIndicePairs_mod)
+        .op("spconv::get_indice_pairs_mod2", &spconv::getIndicePairs_mod2)
         .op("spconv::indice_conv_mod", &spconv::indiceConv_mod)
         .op("spconv::indice_conv_backward_mod", &spconv::indiceConvBackward_mod);

@@ -21,66 +21,8 @@
 
 namespace spconv {
 
-template <typename Index, typename IndexGrid, unsigned NDim>
-Index getIndicePairsConv(tv::TensorView<const Index> indicesIn,
-                         tv::TensorView<Index> indicesOut,
-                         tv::TensorView<IndexGrid> gridsOut,
-                         tv::TensorView<Index> indicePairs,
-                         tv::TensorView<Index> indiceNum,
-                         const Index *kernelSize, const Index *stride,
-                         const Index *padding, const Index *dilation,
-                         const Index *outSpatialShape) {
-  // indicesOut: num_active * kernelVolume * (NDim + 1)
-  Index numAct = 0;
-  auto numActIn = indicesIn.dim(0);
-  Index batchIdx = 0;
-  Index spatialVolume = 1;
-#pragma unroll
-  for (int i = 0; i < NDim; ++i) {
-    spatialVolume *= outSpatialShape[i];
-  }
-  Index kernelVolume = 1;
-#pragma unroll
-  for (int i = 0; i < NDim; ++i) {
-    kernelVolume *= kernelSize[i];
-  }
-  Index numValidPoints = 0;
-  std::vector<Index> validPoints_(kernelVolume * (NDim + 1));
-  Index *validPoints = validPoints_.data();
-  Index *pointPtr = nullptr;
-  Index hashval;
-  tsl::robin_map<Index, Index> hash;
-  for (int j = 0; j < numActIn; ++j) {
-    batchIdx = indicesIn(j, 0);
-    numValidPoints = getValidOutPos<Index, NDim>(
-        indicesIn.data() + j * (NDim + 1) + 1, kernelSize, stride, padding,
-        dilation, outSpatialShape, validPoints);
-    for (Index i = 0; i < numValidPoints; ++i) {
-      pointPtr = validPoints + i * (NDim + 1);
-      auto offset = pointPtr[NDim];
-      auto index = tv::rowArrayIdx<Index, NDim>(pointPtr, outSpatialShape) +
-                   spatialVolume * batchIdx;
-      auto iter = hash.find(index);
-      if (iter == hash.end()) {
-        for (unsigned k = 1; k < NDim + 1; ++k) {
-          indicesOut(numAct, k) = pointPtr[k - 1];
-        }
-        indicesOut(numAct, 0) = batchIdx;
-        hashval = numAct++;
-        hash[index] = hashval;
-      } else {
-        hashval = iter->second;
-      }
-      // indicePairs: [K, 2, L]
-      indicePairs(0, offset, indiceNum[offset]) = j;
-      indicePairs(1, offset, indiceNum[offset]++) = hashval;
-    }
-  }
-  return numAct;
-}
-
-template <typename Index, typename IndexGrid, unsigned NDim>
-Index getIndicePairsDeConv(tv::TensorView<const Index> indicesIn,
+  template<typename Index, typename IndexGrid, unsigned NDim>
+  Index getIndicePairsConv(tv::TensorView<const Index> indicesIn,
                            tv::TensorView<Index> indicesOut,
                            tv::TensorView<IndexGrid> gridsOut,
                            tv::TensorView<Index> indicePairs,
@@ -88,95 +30,213 @@ Index getIndicePairsDeConv(tv::TensorView<const Index> indicesIn,
                            const Index *kernelSize, const Index *stride,
                            const Index *padding, const Index *dilation,
                            const Index *outSpatialShape) {
-  Index numAct = 0;
-  auto numActIn = indicesIn.dim(0);
-  Index batchIdx = 0;
-  Index spatialVolume = 1;
-#pragma unroll
-  for (int i = 0; i < NDim; ++i) {
-    spatialVolume *= outSpatialShape[i];
-  }
-  Index kernelVolume = 1;
-#pragma unroll
-  for (int i = 0; i < NDim; ++i) {
-    kernelVolume *= kernelSize[i];
-  }
-  Index numValidPoints = 0;
-  std::vector<Index> validPoints_(kernelVolume * (NDim + 1));
-  Index *validPoints = validPoints_.data();
-  Index *pointPtr = nullptr;
-  Index hashval;
-  tsl::robin_map<Index, Index> hash;
-  for (int j = 0; j < numActIn; ++j) {
-    batchIdx = indicesIn(j, 0);
-    numValidPoints = getValidOutPosTranspose<Index, NDim>(
-        indicesIn.data() + j * (NDim + 1) + 1, kernelSize, stride, padding,
-        dilation, outSpatialShape, validPoints);
-    for (Index i = 0; i < numValidPoints; ++i) {
-      pointPtr = validPoints + i * (NDim + 1);
-      auto offset = pointPtr[NDim];
-      auto index = tv::rowArrayIdx<Index, NDim>(pointPtr, outSpatialShape) +
-                   spatialVolume * batchIdx;
 
-      auto iter = hash.find(index);
-      if (iter == hash.end()) {
-        for (unsigned k = 1; k < NDim + 1; ++k) {
-          indicesOut(numAct, k) = pointPtr[k - 1];
-        }
-        indicesOut(numAct, 0) = batchIdx;
-        hashval = numAct++;
-        hash[index] = hashval;
-      } else {
-        hashval = iter->second;
-      }
-      // indicePairs: [K, 2, L]
-      indicePairs(0, offset, indiceNum[offset]) = j;
-      indicePairs(1, offset, indiceNum[offset]++) = hashval;
+    Index numAct = 0;
+    auto numActIn = indicesIn.dim(0);
+    Index batchIdx = 0;
+    Index spatialVolume = 1;
+#pragma unroll
+    for (int i = 0; i < NDim; ++i) {
+      spatialVolume *= outSpatialShape[i];
     }
-  }
-  return numAct;
-}
-
-#ifndef TV_WINDOWS
-template <typename Index, typename IndexGrid, unsigned NDim>
-Index getIndicePairsSubM(tv::TensorView<const Index> indicesIn,
-                         tv::TensorView<IndexGrid> gridsOut,
-                         tv::TensorView<Index> indicePairs,
-                         tv::TensorView<Index> indiceNum,
-                         const Index *const kernelSize,
-                         const Index *const stride, const Index *const padding,
-                         const Index *dilation,
-                         const Index *const outSpatialShape) {
-  Index numAct = 0;
-  auto numActIn = indicesIn.dim(0);
-  Index batchIdx = 0;
-  Index spatialVolume = 1;
+    Index kernelVolume = 1;
 #pragma unroll
-  for (int i = 0; i < NDim; ++i) {
-    spatialVolume *= outSpatialShape[i];
-  }
-  Index kernelVolume = 1;
-#pragma unroll
-  for (int i = 0; i < NDim; ++i) {
-    kernelVolume *= kernelSize[i];
-  }
-  tsl::robin_map<Index, Index> hash;
-  for (int j = 0; j < numActIn; ++j) {
-    Index index = 0;
-    index = tv::rowArrayIdx<Index, NDim>(indicesIn.data() + j * (NDim + 1) + 1,
-                                         outSpatialShape) +
-            spatialVolume * indicesIn(j, 0);
-    hash[index] = j;
-  }
-
-  at::parallel_for(0, numActIn, 0, [&](int64_t begin, int64_t end) {
-    Index index = 0;
+    for (int i = 0; i < NDim; ++i) {
+      kernelVolume *= kernelSize[i];
+    }
     Index numValidPoints = 0;
     std::vector<Index> validPoints_(kernelVolume * (NDim + 1));
     Index *validPoints = validPoints_.data();
     Index *pointPtr = nullptr;
-    Index oldOffset = 0;
-    for (int j = begin; j < end; ++j) {
+    Index hashval;
+    tsl::robin_map<Index, Index> hash;
+    for (int j = 0; j < numActIn; ++j) {
+      batchIdx = indicesIn(j, 0);
+      numValidPoints = getValidOutPos<Index, NDim>(
+          indicesIn.data() + j * (NDim + 1) + 1, kernelSize, stride, padding,
+          dilation, outSpatialShape, validPoints);
+      for (Index i = 0; i < numValidPoints; ++i) {
+        pointPtr = validPoints + i * (NDim + 1);
+        auto offset = pointPtr[NDim];
+        auto index = tv::rowArrayIdx<Index, NDim>(pointPtr, outSpatialShape) +
+                     spatialVolume * batchIdx;
+        auto iter = hash.find(index);
+        if (iter == hash.end()) {
+          for (unsigned k = 1; k < NDim + 1; ++k) {
+            indicesOut(numAct, k) = pointPtr[k - 1];
+          }
+          indicesOut(numAct, 0) = batchIdx;
+          hashval = numAct++;
+          hash[index] = hashval;
+        } else {
+          hashval = iter->second;
+        }
+
+        indicePairs(0, offset, indiceNum[offset]) = j;
+        indicePairs(1, offset, indiceNum[offset]++) = hashval;
+      }
+    }
+    return numAct;
+  }
+
+  template<typename Index, typename IndexGrid, unsigned NDim>
+  Index getIndicePairsDeConv(tv::TensorView<const Index> indicesIn,
+                             tv::TensorView<Index> indicesOut,
+                             tv::TensorView<IndexGrid> gridsOut,
+                             tv::TensorView<Index> indicePairs,
+                             tv::TensorView<Index> indiceNum,
+                             const Index *kernelSize, const Index *stride,
+                             const Index *padding, const Index *dilation,
+                             const Index *outSpatialShape) {
+    Index numAct = 0;
+    auto numActIn = indicesIn.dim(0);
+    Index batchIdx = 0;
+    Index spatialVolume = 1;
+#pragma unroll
+    for (int i = 0; i < NDim; ++i) {
+      spatialVolume *= outSpatialShape[i];
+    }
+    Index kernelVolume = 1;
+#pragma unroll
+    for (int i = 0; i < NDim; ++i) {
+      kernelVolume *= kernelSize[i];
+    }
+    Index numValidPoints = 0;
+    std::vector<Index> validPoints_(kernelVolume * (NDim + 1));
+    Index *validPoints = validPoints_.data();
+    Index *pointPtr = nullptr;
+    Index hashval;
+    tsl::robin_map<Index, Index> hash;
+    for (int j = 0; j < numActIn; ++j) {
+      batchIdx = indicesIn(j, 0);
+      numValidPoints = getValidOutPosTranspose<Index, NDim>(
+          indicesIn.data() + j * (NDim + 1) + 1, kernelSize, stride, padding,
+          dilation, outSpatialShape, validPoints);
+      for (Index i = 0; i < numValidPoints; ++i) {
+        pointPtr = validPoints + i * (NDim + 1);
+        auto offset = pointPtr[NDim];
+        auto index = tv::rowArrayIdx<Index, NDim>(pointPtr, outSpatialShape) +
+                     spatialVolume * batchIdx;
+
+        auto iter = hash.find(index);
+        if (iter == hash.end()) {
+          for (unsigned k = 1; k < NDim + 1; ++k) {
+            indicesOut(numAct, k) = pointPtr[k - 1];
+          }
+          indicesOut(numAct, 0) = batchIdx;
+          hashval = numAct++;
+          hash[index] = hashval;
+        } else {
+          hashval = iter->second;
+        }
+
+        indicePairs(0, offset, indiceNum[offset]) = j;
+        indicePairs(1, offset, indiceNum[offset]++) = hashval;
+      }
+    }
+    return numAct;
+  }
+
+#ifndef TV_WINDOWS
+
+  template<typename Index, typename IndexGrid, unsigned NDim>
+  Index getIndicePairsSubM(tv::TensorView<const Index> indicesIn,
+                           tv::TensorView<IndexGrid> gridsOut,
+                           tv::TensorView<Index> indicePairs,
+                           tv::TensorView<Index> indiceNum,
+                           const Index *const kernelSize,
+                           const Index *const stride, const Index *const padding,
+                           const Index *dilation,
+                           const Index *const outSpatialShape) {
+    Index numAct = 0;
+    auto numActIn = indicesIn.dim(0);
+    Index batchIdx = 0;
+    Index spatialVolume = 1;
+#pragma unroll
+    for (int i = 0; i < NDim; ++i) {
+      spatialVolume *= outSpatialShape[i];
+    }
+    Index kernelVolume = 1;
+#pragma unroll
+    for (int i = 0; i < NDim; ++i) {
+      kernelVolume *= kernelSize[i];
+    }
+    tsl::robin_map<Index, Index> hash;
+    for (int j = 0; j < numActIn; ++j) {
+      Index index = 0;
+      index = tv::rowArrayIdx<Index, NDim>(indicesIn.data() + j * (NDim + 1) + 1,
+                                           outSpatialShape) +
+              spatialVolume * indicesIn(j, 0);
+      hash[index] = j;
+    }
+
+    at::parallel_for(0, numActIn, 0, [&](int64_t begin, int64_t end) {
+      Index index = 0;
+      Index numValidPoints = 0;
+      std::vector<Index> validPoints_(kernelVolume * (NDim + 1));
+      Index *validPoints = validPoints_.data();
+      Index *pointPtr = nullptr;
+      Index oldOffset = 0;
+      for (int j = begin; j < end; ++j) {
+        numValidPoints = getValidOutPos<Index, NDim>(
+            indicesIn.data() + j * (NDim + 1) + 1, kernelSize, stride, padding,
+            dilation, outSpatialShape, validPoints);
+        for (Index i = 0; i < numValidPoints; ++i) {
+          pointPtr = validPoints + i * (NDim + 1);
+          auto offset = pointPtr[NDim];
+          index = tv::rowArrayIdx<Index, NDim>(pointPtr, outSpatialShape) +
+                  spatialVolume * indicesIn(j, 0);
+          auto iter = hash.find(index);
+          if (iter != hash.end()) {
+#pragma omp atomic capture
+            oldOffset = indiceNum[offset]++;
+            indicePairs(0, offset, oldOffset) = j;
+            indicePairs(1, offset, oldOffset) = iter->second;
+          }
+        }
+      }
+    });
+    return numActIn;
+  }
+
+#else
+  template <typename Index, typename IndexGrid, unsigned NDim>
+  Index getIndicePairsSubM(tv::TensorView<const Index> indicesIn,
+                           tv::TensorView<IndexGrid> gridsOut,
+                           tv::TensorView<Index> indicePairs,
+                           tv::TensorView<Index> indiceNum,
+                           const Index *const kernelSize,
+                           const Index *const stride, const Index *const padding,
+                           const Index *dilation,
+                           const Index *const outSpatialShape) {
+    Index numAct = 0;
+    auto numActIn = indicesIn.dim(0);
+    Index batchIdx = 0;
+    Index spatialVolume = 1;
+#pragma unroll
+    for (int i = 0; i < NDim; ++i) {
+      spatialVolume *= outSpatialShape[i];
+    }
+    Index kernelVolume = 1;
+#pragma unroll
+    for (int i = 0; i < NDim; ++i) {
+      kernelVolume *= kernelSize[i];
+    }
+    Index numValidPoints = 0;
+    // Index validPoints[kernelVolume * (NDim + 1)];
+    std::vector<Index> validPoints_(kernelVolume * (NDim + 1));
+    Index *validPoints = validPoints_.data();
+    Index *pointPtr = nullptr;
+    tsl::robin_map<Index, Index> hash;
+    for (int j = 0; j < numActIn; ++j) {
+      Index index = 0;
+      index = tv::rowArrayIdx<Index, NDim>(indicesIn.data() + j * (NDim + 1) + 1,
+                                           outSpatialShape) +
+              spatialVolume * indicesIn(j, 0);
+      hash[index] = j;
+    }
+    Index index = 0;
+    for (int j = 0; j < numActIn; ++j) {
       numValidPoints = getValidOutPos<Index, NDim>(
           indicesIn.data() + j * (NDim + 1) + 1, kernelSize, stride, padding,
           dilation, outSpatialShape, validPoints);
@@ -187,109 +247,47 @@ Index getIndicePairsSubM(tv::TensorView<const Index> indicesIn,
                 spatialVolume * indicesIn(j, 0);
         auto iter = hash.find(index);
         if (iter != hash.end()) {
-#pragma omp atomic capture
-          oldOffset = indiceNum[offset]++;
-          indicePairs(0, offset, oldOffset) = j;
-          indicePairs(1, offset, oldOffset) = iter->second;
+          indicePairs(0, offset, indiceNum[offset]) = j;
+          indicePairs(1, offset, indiceNum[offset]++) = iter->second;
         }
       }
     }
-  });
-  return numActIn;
-}
-#else
-template <typename Index, typename IndexGrid, unsigned NDim>
-Index getIndicePairsSubM(tv::TensorView<const Index> indicesIn,
-                         tv::TensorView<IndexGrid> gridsOut,
-                         tv::TensorView<Index> indicePairs,
-                         tv::TensorView<Index> indiceNum,
-                         const Index *const kernelSize,
-                         const Index *const stride, const Index *const padding,
-                         const Index *dilation,
-                         const Index *const outSpatialShape) {
-  Index numAct = 0;
-  auto numActIn = indicesIn.dim(0);
-  Index batchIdx = 0;
-  Index spatialVolume = 1;
-#pragma unroll
-  for (int i = 0; i < NDim; ++i) {
-    spatialVolume *= outSpatialShape[i];
+    return numActIn;
   }
-  Index kernelVolume = 1;
-#pragma unroll
-  for (int i = 0; i < NDim; ++i) {
-    kernelVolume *= kernelSize[i];
-  }
-  Index numValidPoints = 0;
-  // Index validPoints[kernelVolume * (NDim + 1)];
-  std::vector<Index> validPoints_(kernelVolume * (NDim + 1));
-  Index *validPoints = validPoints_.data();
-  Index *pointPtr = nullptr;
-  tsl::robin_map<Index, Index> hash;
-  for (int j = 0; j < numActIn; ++j) {
-    Index index = 0;
-    index = tv::rowArrayIdx<Index, NDim>(indicesIn.data() + j * (NDim + 1) + 1,
-                                         outSpatialShape) +
-            spatialVolume * indicesIn(j, 0);
-    hash[index] = j;
-  }
-  Index index = 0;
-  for (int j = 0; j < numActIn; ++j) {
-    numValidPoints = getValidOutPos<Index, NDim>(
-        indicesIn.data() + j * (NDim + 1) + 1, kernelSize, stride, padding,
-        dilation, outSpatialShape, validPoints);
-    for (Index i = 0; i < numValidPoints; ++i) {
-      pointPtr = validPoints + i * (NDim + 1);
-      auto offset = pointPtr[NDim];
-      index = tv::rowArrayIdx<Index, NDim>(pointPtr, outSpatialShape) +
-              spatialVolume * indicesIn(j, 0);
-      auto iter = hash.find(index);
-      if (iter != hash.end()) {
-        indicePairs(0, offset, indiceNum[offset]) = j;
-        indicePairs(1, offset, indiceNum[offset]++) = iter->second;
-      }
-    }
-  }
-  return numActIn;
-}
 #endif
 
 
-  template <typename Index, typename IndexGrid, unsigned NDim>
+  template<typename Index, typename IndexGrid, unsigned NDim>
   Index getIndicePairsSubM_mod(tv::TensorView<const Index> indicesIn,
-                              tv::TensorView<IndexGrid> gridsOut,
-                              tv::TensorView<Index> indicePairs, // [2, kernelVolume/2+1, numAct]
-                              tv::TensorView<Index> indiceNum,
-                              const Index *const kernelSize,
-                              const Index *const stride,
-                              const Index *const padding,
-                              const Index *dilation,
-                              const Index *const outSpatialShape)
-  {
+                               tv::TensorView<IndexGrid> gridsOut,
+                               tv::TensorView<Index> indicePairs,
+                               tv::TensorView<Index> indiceNum,
+                               const Index *const kernelSize,
+                               const Index *const stride,
+                               const Index *const padding,
+                               const Index *dilation,
+                               const Index *const outSpatialShape) {
     Index numAct = 0;
     auto numActIn = indicesIn.dim(0);
     Index batchIdx = 0;
 
-    // output featuremap volume
+
     Index spatialVolume = 1;
 #pragma unroll
-    for (int i = 0; i < NDim; ++i)
-    {
+    for (int i = 0; i < NDim; ++i) {
       spatialVolume *= outSpatialShape[i];
     }
 
-    // num of kernel sampling points
+
     Index kernelVolume = 1;
 #pragma unroll
-    for (int i = 0; i < NDim; ++i)
-    {
+    for (int i = 0; i < NDim; ++i) {
       kernelVolume *= kernelSize[i];
     }
-    auto halfKernelVolume = kernelVolume / 2 + 1;
-    // hash: dense index --> sparse index
+    auto halfKernelVolume = kernelVolume / 2;
+
     tsl::robin_map<Index, Index> hash;
-    for (int j = 0; j < numActIn; ++j)
-    {
+    for (int j = 0; j < numActIn; ++j) {
       Index index = 0;
       index = tv::rowArrayIdx<Index, NDim>(indicesIn.data() + j * (NDim + 1) + 1, outSpatialShape) +
               spatialVolume * indicesIn(j, 0);
@@ -303,22 +301,19 @@ Index getIndicePairsSubM(tv::TensorView<const Index> indicesIn,
       Index *validPoints = validPoints_.data();
       Index *pointPtr = nullptr;
       Index oldOffset = 0;
-      for (int j = begin; j < end; ++j)
-      {
-        // validPoints stores the coordinate of output points
-        // data format: [x1, y1, x1, o1, x2, y2, z2, o2, ..., xn, yn, zn, on, 0, 0, 0, ..., 0]
+      for (int j = begin; j < end; ++j) {
+
+
         numValidPoints = getValidOutPos<Index, NDim>(indicesIn.data() + j * (NDim + 1) + 1,
                                                      kernelSize, stride, padding, dilation,
                                                      outSpatialShape, validPoints);
-        for (Index i = 0; i < numValidPoints; ++i)
-        {
+        for (Index i = 0; i < numValidPoints; ++i) {
           pointPtr = validPoints + i * (NDim + 1);
           auto offset = pointPtr[NDim];
-          // check the input point hash map to see whether a possible output point exists
+
           index = tv::rowArrayIdx<Index, NDim>(pointPtr, outSpatialShape) + spatialVolume * indicesIn(j, 0);
           auto iter = hash.find(index);
-          if (iter != hash.end() && offset < halfKernelVolume)
-          {
+          if (iter != hash.end() && offset < halfKernelVolume) {
 #pragma omp atomic capture
             oldOffset = indiceNum[offset]++;
             indicePairs(0, offset, oldOffset) = j;
@@ -330,93 +325,125 @@ Index getIndicePairsSubM(tv::TensorView<const Index> indicesIn,
     return numActIn;
   }
 
+  template<typename Index, typename IndexGrid, unsigned NDim>
+  Index getIndicePairsSubM_mod2(tv::TensorView<const Index> indicesIn,
+                                tv::TensorView<IndexGrid> gridsOut,
+                                torch::Tensor &indicePairs,
+                                tv::TensorView<Index> indiceNum,
+                                const Index *const kernelSize,
+                                const Index *const stride,
+                                const Index *const padding,
+                                const Index *dilation,
+                                const Index *const outSpatialShape) {
+    Index numAct = 0;
+    auto numActIn = indicesIn.dim(0);
+    Index batchIdx = 0;
 
-int create_conv_indice_pair_cpu(
-    torch::Tensor indicesIn, torch::Tensor indicesOut, torch::Tensor gridsOut,
-    torch::Tensor indicePairs, torch::Tensor indiceNum,
-    std::vector<int64_t> kernelSize, std::vector<int64_t> stride,
-    std::vector<int64_t> padding, std::vector<int64_t> dilation,
-    std::vector<int64_t> outSpatialShape, bool transpose, bool resetGrid,
-    bool useHash) {
-  auto ndim = outSpatialShape.size();
-  auto numActIn = indicesIn.size(0);
-  int batchSize = gridsOut.size(0);
-  auto kernelVolume = indiceNum.size(0);
-  if (numActIn == 0)
-    return 0;
-  tv::dispatch_torch<int32_t, int64_t>(indicesIn.scalar_type(), [&](auto V) {
-    using Index = decltype(V);
-    using IndexGrid = int32_t;
-    tv::dispatch_int<2, 3, 4>(ndim, [&](auto I) {
-      constexpr int NDim = decltype(I)::value;
-      tv::SimpleVector<Index, NDim> ks(kernelSize.begin(), kernelSize.end());
-      tv::SimpleVector<Index, NDim> st(stride.begin(), stride.end());
-      tv::SimpleVector<Index, NDim> pa(padding.begin(), padding.end());
-      tv::SimpleVector<Index, NDim> di(dilation.begin(), dilation.end());
-      tv::SimpleVector<Index, NDim> ou(outSpatialShape.begin(),
-                                       outSpatialShape.end());
-      if (transpose)
-        numActIn = getIndicePairsDeConv<Index, IndexGrid, NDim>(
-            tv::torch2tv<Index>(indicesIn), tv::torch2tv<Index>(indicesOut),
-            tv::torch2tv<IndexGrid>(gridsOut), tv::torch2tv<Index>(indicePairs),
-            tv::torch2tv<Index>(indiceNum), ks.data(), st.data(), pa.data(),
-            di.data(), ou.data());
-      else
-        numActIn = getIndicePairsConv<Index, IndexGrid, NDim>(
-            tv::torch2tv<Index>(indicesIn), tv::torch2tv<Index>(indicesOut),
-            tv::torch2tv<IndexGrid>(gridsOut), tv::torch2tv<Index>(indicePairs),
-            tv::torch2tv<Index>(indiceNum), ks.data(), st.data(), pa.data(),
-            di.data(), ou.data());
+
+    Index spatialVolume = 1;
+#pragma unroll
+    for (int i = 0; i < NDim; ++i) {
+      spatialVolume *= outSpatialShape[i];
+    }
+
+
+    Index kernelVolume = 1;
+#pragma unroll
+    for (int i = 0; i < NDim; ++i) {
+      kernelVolume *= kernelSize[i];
+    }
+    auto halfKernelVolume = kernelVolume / 2;
+
+
+    tsl::robin_map<Index, Index> hash;
+    for (int j = 0; j < numActIn; ++j) {
+      Index index = 0;
+      index = tv::rowArrayIdx<Index, NDim>(indicesIn.data() + j * (NDim + 1) + 1, outSpatialShape) +
+              spatialVolume * indicesIn(j, 0);
+      hash[index] = j;
+    }
+
+    at::parallel_for(0, numActIn, 0, [&](int64_t begin, int64_t end) {
+      Index index = 0;
+      Index numValidPoints = 0;
+      std::vector<Index> validPoints_(kernelVolume * (NDim + 1));
+      Index *validPoints = validPoints_.data();
+      Index *pointPtr = nullptr;
+      Index oldOffset = 0;
+      for (int j = begin; j < end; ++j) {
+
+
+        numValidPoints = getValidOutPos<Index, NDim>(indicesIn.data() + j * (NDim + 1) + 1,
+                                                     kernelSize, stride, padding, dilation,
+                                                     outSpatialShape, validPoints);
+        for (Index i = 0; i < numValidPoints; ++i) {
+          pointPtr = validPoints + i * (NDim + 1);
+          auto offset = pointPtr[NDim];
+
+          index = tv::rowArrayIdx<Index, NDim>(pointPtr, outSpatialShape) + spatialVolume * indicesIn(j, 0);
+          auto iter = hash.find(index);
+          if (iter != hash.end() && offset < halfKernelVolume) {
+#pragma omp atomic capture
+            oldOffset = indiceNum[offset]++;
+
+
+          }
+        }
+      }
     });
-  });
-  return numActIn;
-}
 
-int create_submconv_indice_pair_cpu(
-    torch::Tensor indicesIn, torch::Tensor gridsOut, torch::Tensor indicePairs,
-    torch::Tensor indiceNum, std::vector<int64_t> kernelSize,
-    std::vector<int64_t> stride, std::vector<int64_t> padding,
-    std::vector<int64_t> dilation, std::vector<int64_t> outSpatialShape,
-    bool transpose, bool resetGrid, bool useHash) {
-  auto ndim = outSpatialShape.size();
-  auto numActIn = indicesIn.size(0);
-  int batchSize = gridsOut.size(0);
-  auto kernelVolume = indiceNum.size(0);
-  if (numActIn == 0)
-    return 0;
-  tv::dispatch_torch<int32_t, int64_t>(indicesIn.scalar_type(), [&](auto V) {
-    using Index = decltype(V);
-    using IndexGrid = int32_t;
-    tv::dispatch_int<2, 3, 4>(ndim, [&](auto I) {
-      constexpr int NDim = decltype(I)::value;
-      tv::SimpleVector<Index, NDim> ks(kernelSize.begin(), kernelSize.end());
-      tv::SimpleVector<Index, NDim> st(stride.begin(), stride.end());
-      tv::SimpleVector<Index, NDim> pa(padding.begin(), padding.end());
-      tv::SimpleVector<Index, NDim> di(dilation.begin(), dilation.end());
-      tv::SimpleVector<Index, NDim> ou(outSpatialShape.begin(),
-                                       outSpatialShape.end());
-      numActIn = getIndicePairsSubM<Index, IndexGrid, NDim>(
-          tv::torch2tv<Index>(indicesIn), tv::torch2tv<IndexGrid>(gridsOut),
-          tv::torch2tv<Index>(indicePairs), tv::torch2tv<Index>(indiceNum),
-          ks.data(), st.data(), pa.data(), di.data(), ou.data());
+    int MaxSize_2nd = *std::max_element(indiceNum.data(), indiceNum.data() + kernelVolume / 2);
+    indicePairs = torch::full({2, kernelVolume / 2, MaxSize_2nd}, -1,
+                              torch::dtype(torch::kInt32).device(torch::kCPU));
+    auto _indicePairs = tv::torch2tv<IndexGrid>(indicePairs);
+    auto __indiceNum = torch::zeros({kernelVolume}, torch::dtype(torch::kInt32).device(torch::kCPU));
+    auto _indiceNum = tv::torch2tv<IndexGrid>(__indiceNum);
+
+    at::parallel_for(0, numActIn, 0, [&](int64_t begin, int64_t end) {
+      Index index = 0;
+      Index numValidPoints = 0;
+      std::vector<Index> validPoints_(kernelVolume * (NDim + 1));
+      Index *validPoints = validPoints_.data();
+      Index *pointPtr = nullptr;
+      Index oldOffset = 0;
+      for (int j = begin; j < end; ++j) {
+
+
+        numValidPoints = getValidOutPos<Index, NDim>(indicesIn.data() + j * (NDim + 1) + 1,
+                                                     kernelSize, stride, padding, dilation,
+                                                     outSpatialShape, validPoints);
+        for (Index i = 0; i < numValidPoints; ++i) {
+          pointPtr = validPoints + i * (NDim + 1);
+          auto offset = pointPtr[NDim];
+
+          index = tv::rowArrayIdx<Index, NDim>(pointPtr, outSpatialShape) + spatialVolume * indicesIn(j, 0);
+          auto iter = hash.find(index);
+          if (iter != hash.end() && offset < halfKernelVolume) {
+#pragma omp atomic capture
+            oldOffset = _indiceNum[offset]++;
+            _indicePairs(0, offset, oldOffset) = j;
+            _indicePairs(1, offset, oldOffset) = iter->second;
+
+          }
+        }
+      }
     });
-  });
-  return numActIn;
-}
+    return numActIn;
+  }
 
-  int create_submconv_indice_pair_cpu_mod(torch::Tensor indicesIn,
-                                        torch::Tensor gridsOut,
-                                        torch::Tensor indicePairs, // [2, kernelVolume/2+1, numAct]
-                                        torch::Tensor indiceNum,
-                                        std::vector<int64_t> kernelSize,
-                                        std::vector<int64_t> stride,
-                                        std::vector<int64_t> padding,
-                                        std::vector<int64_t> dilation,
-                                        std::vector<int64_t> outSpatialShape,
-                                        bool transpose,
-                                        bool resetGrid,
-                                        bool useHash)
-  {
+  int create_conv_indice_pair_cpu(torch::Tensor indicesIn,
+                                  torch::Tensor indicesOut,
+                                  torch::Tensor gridsOut,
+                                  torch::Tensor indicePairs,
+                                  torch::Tensor indiceNum,
+                                  std::vector<int64_t> kernelSize,
+                                  std::vector<int64_t> stride,
+                                  std::vector<int64_t> padding,
+                                  std::vector<int64_t> dilation,
+                                  std::vector<int64_t> outSpatialShape,
+                                  bool transpose,
+                                  bool resetGrid,
+                                  bool useHash) {
     auto ndim = outSpatialShape.size();
     auto numActIn = indicesIn.size(0);
     int batchSize = gridsOut.size(0);
@@ -428,18 +455,136 @@ int create_submconv_indice_pair_cpu(
       using IndexGrid = int32_t;
       tv::dispatch_int<2, 3, 4>(ndim, [&](auto I) {
         constexpr int NDim = decltype(I)::value;
-        // from vectors to SimpleVector, why?
+        tv::SimpleVector<Index, NDim> ks(kernelSize.begin(), kernelSize.end());
+        tv::SimpleVector<Index, NDim> st(stride.begin(), stride.end());
+        tv::SimpleVector<Index, NDim> pa(padding.begin(), padding.end());
+        tv::SimpleVector<Index, NDim> di(dilation.begin(), dilation.end());
+        tv::SimpleVector<Index, NDim> ou(outSpatialShape.begin(),
+                                         outSpatialShape.end());
+        if (transpose)
+          numActIn = getIndicePairsDeConv<Index, IndexGrid, NDim>(
+              tv::torch2tv<Index>(indicesIn), tv::torch2tv<Index>(indicesOut),
+              tv::torch2tv<IndexGrid>(gridsOut), tv::torch2tv<Index>(indicePairs),
+              tv::torch2tv<Index>(indiceNum), ks.data(), st.data(), pa.data(),
+              di.data(), ou.data());
+        else
+          numActIn = getIndicePairsConv<Index, IndexGrid, NDim>(
+              tv::torch2tv<Index>(indicesIn), tv::torch2tv<Index>(indicesOut),
+              tv::torch2tv<IndexGrid>(gridsOut), tv::torch2tv<Index>(indicePairs),
+              tv::torch2tv<Index>(indiceNum), ks.data(), st.data(), pa.data(),
+              di.data(), ou.data());
+      });
+    });
+    return numActIn;
+  }
+
+  int create_submconv_indice_pair_cpu(
+      torch::Tensor indicesIn, torch::Tensor gridsOut, torch::Tensor indicePairs,
+      torch::Tensor indiceNum, std::vector<int64_t> kernelSize,
+      std::vector<int64_t> stride, std::vector<int64_t> padding,
+      std::vector<int64_t> dilation, std::vector<int64_t> outSpatialShape,
+      bool transpose, bool resetGrid, bool useHash) {
+    auto ndim = outSpatialShape.size();
+    auto numActIn = indicesIn.size(0);
+    int batchSize = gridsOut.size(0);
+    auto kernelVolume = indiceNum.size(0);
+    if (numActIn == 0)
+      return 0;
+    tv::dispatch_torch<int32_t, int64_t>(indicesIn.scalar_type(), [&](auto V) {
+      using Index = decltype(V);
+      using IndexGrid = int32_t;
+      tv::dispatch_int<2, 3, 4>(ndim, [&](auto I) {
+        constexpr int NDim = decltype(I)::value;
+        tv::SimpleVector<Index, NDim> ks(kernelSize.begin(), kernelSize.end());
+        tv::SimpleVector<Index, NDim> st(stride.begin(), stride.end());
+        tv::SimpleVector<Index, NDim> pa(padding.begin(), padding.end());
+        tv::SimpleVector<Index, NDim> di(dilation.begin(), dilation.end());
+        tv::SimpleVector<Index, NDim> ou(outSpatialShape.begin(),
+                                         outSpatialShape.end());
+        numActIn = getIndicePairsSubM<Index, IndexGrid, NDim>(
+            tv::torch2tv<Index>(indicesIn), tv::torch2tv<IndexGrid>(gridsOut),
+            tv::torch2tv<Index>(indicePairs), tv::torch2tv<Index>(indiceNum),
+            ks.data(), st.data(), pa.data(), di.data(), ou.data());
+      });
+    });
+    return numActIn;
+  }
+
+  int create_submconv_indice_pair_cpu_mod(torch::Tensor indicesIn,
+                                          torch::Tensor gridsOut,
+                                          torch::Tensor indicePairs,
+                                          torch::Tensor indiceNum,
+                                          std::vector<int64_t> kernelSize,
+                                          std::vector<int64_t> stride,
+                                          std::vector<int64_t> padding,
+                                          std::vector<int64_t> dilation,
+                                          std::vector<int64_t> outSpatialShape,
+                                          bool transpose,
+                                          bool resetGrid,
+                                          bool useHash) {
+    auto ndim = outSpatialShape.size();
+    auto numActIn = indicesIn.size(0);
+    int batchSize = gridsOut.size(0);
+    auto kernelVolume = indiceNum.size(0);
+    if (numActIn == 0)
+      return 0;
+    tv::dispatch_torch<int32_t, int64_t>(indicesIn.scalar_type(), [&](auto V) {
+      using Index = decltype(V);
+      using IndexGrid = int32_t;
+      tv::dispatch_int<2, 3, 4>(ndim, [&](auto I) {
+        constexpr int NDim = decltype(I)::value;
+
         tv::SimpleVector<Index, NDim> ks(kernelSize.begin(), kernelSize.end());
         tv::SimpleVector<Index, NDim> st(stride.begin(), stride.end());
         tv::SimpleVector<Index, NDim> pa(padding.begin(), padding.end());
         tv::SimpleVector<Index, NDim> di(dilation.begin(), dilation.end());
         tv::SimpleVector<Index, NDim> ou(outSpatialShape.begin(), outSpatialShape.end());
         numActIn = getIndicePairsSubM_mod<Index, IndexGrid, NDim>(tv::torch2tv<Index>(indicesIn),
-                                                              tv::torch2tv<IndexGrid>(gridsOut),
-                                                              tv::torch2tv<Index>(indicePairs),
-                                                              tv::torch2tv<Index>(indiceNum),
-                                                              ks.data(), st.data(), pa.data(),
-                                                              di.data(), ou.data());
+                                                                  tv::torch2tv<IndexGrid>(gridsOut),
+                                                                  tv::torch2tv<Index>(indicePairs),
+                                                                  tv::torch2tv<Index>(indiceNum),
+                                                                  ks.data(), st.data(), pa.data(),
+                                                                  di.data(), ou.data());
+      });
+    });
+    return numActIn;
+  }
+
+  int create_submconv_indice_pair_cpu_mod2(torch::Tensor indicesIn,
+                                           torch::Tensor gridsOut,
+                                           torch::Tensor &indicePairs,
+                                           torch::Tensor indiceNum,
+                                           std::vector<int64_t> kernelSize,
+                                           std::vector<int64_t> stride,
+                                           std::vector<int64_t> padding,
+                                           std::vector<int64_t> dilation,
+                                           std::vector<int64_t> outSpatialShape,
+                                           bool transpose,
+                                           bool resetGrid,
+                                           bool useHash) {
+    auto ndim = outSpatialShape.size();
+    auto numActIn = indicesIn.size(0);
+    int batchSize = gridsOut.size(0);
+    auto kernelVolume = indiceNum.size(0);
+    if (numActIn == 0)
+      return 0;
+    tv::dispatch_torch<int32_t, int64_t>(indicesIn.scalar_type(), [&](auto V) {
+      using Index = decltype(V);
+      using IndexGrid = int32_t;
+      tv::dispatch_int<2, 3, 4>(ndim, [&](auto I) {
+        constexpr int NDim = decltype(I)::value;
+
+        tv::SimpleVector<Index, NDim> ks(kernelSize.begin(), kernelSize.end());
+        tv::SimpleVector<Index, NDim> st(stride.begin(), stride.end());
+        tv::SimpleVector<Index, NDim> pa(padding.begin(), padding.end());
+        tv::SimpleVector<Index, NDim> di(dilation.begin(), dilation.end());
+        tv::SimpleVector<Index, NDim> ou(outSpatialShape.begin(), outSpatialShape.end());
+        numActIn = getIndicePairsSubM_mod2<Index, IndexGrid, NDim>(tv::torch2tv<Index>(indicesIn),
+                                                                   tv::torch2tv<IndexGrid>(gridsOut),
+                                                                   indicePairs,
+                                                                   tv::torch2tv<Index>(indiceNum),
+                                                                   ks.data(), st.data(), pa.data(),
+                                                                   di.data(), ou.data());
       });
     });
     return numActIn;

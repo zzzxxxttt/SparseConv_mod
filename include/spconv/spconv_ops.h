@@ -23,59 +23,74 @@
 
 namespace spconv {
 
-enum ConvAlgo { kNative = 0, kBatch = 1, kBatchGemmGather = 2 };
+  enum ConvAlgo {
+    kNative = 0, kBatch = 1, kBatchGemmGather = 2
+  };
 
 // torch.jit's doc says only support int64, so we need to convert to int32.
-std::vector<torch::Tensor>
-getIndicePairs(torch::Tensor indices, int64_t batchSize,
-               std::vector<int64_t> outSpatialShape,
-               std::vector<int64_t> spatialShape,
-               std::vector<int64_t> kernelSize, std::vector<int64_t> stride,
-               std::vector<int64_t> padding, std::vector<int64_t> dilation,
-               std::vector<int64_t> outPadding, int64_t _subM,
-               int64_t _transpose, int64_t _useHash);
+  std::vector<torch::Tensor>
+  getIndicePairs(torch::Tensor indices, int64_t batchSize,
+                 std::vector<int64_t> outSpatialShape,
+                 std::vector<int64_t> spatialShape,
+                 std::vector<int64_t> kernelSize, std::vector<int64_t> stride,
+                 std::vector<int64_t> padding, std::vector<int64_t> dilation,
+                 std::vector<int64_t> outPadding, int64_t _subM,
+                 int64_t _transpose, int64_t _useHash);
 
-std::vector<torch::Tensor>
-getIndicePairs_mod(torch::Tensor indices,
-                    int64_t batchSize,
-                    std::vector<int64_t> outSpatialShape,
-                    std::vector<int64_t> spatialShape,
-                    std::vector<int64_t> kernelSize,
-                    std::vector<int64_t> stride,
-                    std::vector<int64_t> padding,
-                    std::vector<int64_t> dilation,
-                    std::vector<int64_t> outPadding,
-                    int64_t _subM,
-                    int64_t _transpose,
-                    int64_t _useHash);
+  std::vector<torch::Tensor>
+  getIndicePairs_mod(torch::Tensor indices,
+                     int64_t batchSize,
+                     std::vector<int64_t> outSpatialShape,
+                     std::vector<int64_t> spatialShape,
+                     std::vector<int64_t> kernelSize,
+                     std::vector<int64_t> stride,
+                     std::vector<int64_t> padding,
+                     std::vector<int64_t> dilation,
+                     std::vector<int64_t> outPadding,
+                     int64_t _subM,
+                     int64_t _transpose,
+                     int64_t _useHash);
 
-torch::Tensor indiceConvBatch(torch::Tensor features, torch::Tensor filters,
-                              torch::Tensor indicePairs,
-                              torch::Tensor indiceNum, int64_t numActOut,
-                              int64_t _inverse, int64_t _subM,
-                              bool batchScatter);
+  std::vector<torch::Tensor> getIndicePairs_mod2(torch::Tensor indices,
+                                                 int64_t batchSize,
+                                                 std::vector<int64_t> outSpatialShape,
+                                                 std::vector<int64_t> spatialShape,
+                                                 std::vector<int64_t> kernelSize,
+                                                 std::vector<int64_t> stride,
+                                                 std::vector<int64_t> padding,
+                                                 std::vector<int64_t> dilation,
+                                                 std::vector<int64_t> outPadding,
+                                                 int64_t _subM,
+                                                 int64_t _transpose,
+                                                 int64_t _useHash);
 
-torch::Tensor indiceConv(torch::Tensor features, torch::Tensor filters,
-                         torch::Tensor indicePairs, torch::Tensor indiceNum,
-                         int64_t numActOut, int64_t _inverse, int64_t _subM,
-                         int64_t algo);
+  torch::Tensor indiceConvBatch(torch::Tensor features, torch::Tensor filters,
+                                torch::Tensor indicePairs,
+                                torch::Tensor indiceNum, int64_t numActOut,
+                                int64_t _inverse, int64_t _subM,
+                                bool batchScatter);
 
-torch::Tensor indiceConv_mod(torch::Tensor features,
-                            torch::Tensor filters,
-                            torch::Tensor indicePairs,
-                            torch::Tensor indiceNum,
-                            int64_t numActOut,
-                            int64_t _inverse,
-                            int64_t _subM,
-                            int64_t algo);
+  torch::Tensor indiceConv(torch::Tensor features, torch::Tensor filters,
+                           torch::Tensor indicePairs, torch::Tensor indiceNum,
+                           int64_t numActOut, int64_t _inverse, int64_t _subM,
+                           int64_t algo);
 
-std::vector<torch::Tensor>
-indiceConvBackward(torch::Tensor features, torch::Tensor filters,
-                   torch::Tensor outGrad, torch::Tensor indicePairs,
-                   torch::Tensor indiceNum, int64_t _inverse, int64_t _subM,
-                   int64_t algo);
+  torch::Tensor indiceConv_mod(torch::Tensor features,
+                               torch::Tensor filters,
+                               torch::Tensor indicePairs,
+                               torch::Tensor indiceNum,
+                               int64_t numActOut,
+                               int64_t _inverse,
+                               int64_t _subM,
+                               int64_t algo);
 
-std::vector<torch::Tensor> indiceConvBackward_mod(torch::Tensor features,
+  std::vector<torch::Tensor>
+  indiceConvBackward(torch::Tensor features, torch::Tensor filters,
+                     torch::Tensor outGrad, torch::Tensor indicePairs,
+                     torch::Tensor indiceNum, int64_t _inverse, int64_t _subM,
+                     int64_t algo);
+
+  std::vector<torch::Tensor> indiceConvBackward_mod(torch::Tensor features,
                                                     torch::Tensor filters,
                                                     torch::Tensor outGrad,
                                                     torch::Tensor indicePairs,
@@ -84,11 +99,11 @@ std::vector<torch::Tensor> indiceConvBackward_mod(torch::Tensor features,
                                                     int64_t _subM,
                                                     int64_t algo);
 
-std::vector<torch::Tensor>
-indiceConvBackwardBatch(torch::Tensor features, torch::Tensor filters,
-                        torch::Tensor outGrad, torch::Tensor indicePairs,
-                        torch::Tensor indiceNum, int64_t _inverse,
-                        int64_t _subM, bool batchScatter);
+  std::vector<torch::Tensor>
+  indiceConvBackwardBatch(torch::Tensor features, torch::Tensor filters,
+                          torch::Tensor outGrad, torch::Tensor indicePairs,
+                          torch::Tensor indiceNum, int64_t _inverse,
+                          int64_t _subM, bool batchScatter);
 } // namespace spconv
 
 #endif

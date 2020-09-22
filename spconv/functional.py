@@ -81,10 +81,10 @@ class SparseInverseConvFunction(Function):
 class SubMConvFunction(Function):
     @staticmethod
     def forward(ctx, features, filters, indice_pairs, indice_pair_num,
-                num_activate_out, algo, v2):
+                num_activate_out, algo, version):
         ctx.save_for_backward(indice_pairs, indice_pair_num, features, filters)
         ctx.algo = algo
-        ctx.v2=v2
+        ctx.version = version
         return ops.indice_conv(features,
                                filters,
                                indice_pairs,
@@ -93,7 +93,7 @@ class SubMConvFunction(Function):
                                False,
                                True,
                                algo=algo,
-                               v2=v2)
+                               version=version)
 
     @staticmethod
     def backward(ctx, grad_output):
@@ -106,7 +106,7 @@ class SubMConvFunction(Function):
                                                         False,
                                                         True,
                                                         algo=ctx.algo,
-                                                        v2=ctx.v2)
+                                                        version=ctx.version)
 
         return input_bp, filters_bp, None, None, None, None
 

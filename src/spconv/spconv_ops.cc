@@ -16,7 +16,7 @@ getIndicePairs(torch::Tensor indices, int64_t batchSize,
   // CPU always use hash (tsl::robin_map).
   bool useHash = _useHash != 0 || indices.device().type() == torch::kCPU;
   auto numAct = indices.size(0);
-  auto coorDim = indices.size(1) - 1; // batchIdx + xyz
+  auto coorDim = indices.size(1) - 1;
   TV_ASSERT_RT_ERR(NDim == coorDim, "error");
   TV_ASSERT_RT_ERR(kernelSize.size() == coorDim, "error");
   TV_ASSERT_RT_ERR(outSpatialShape.size() == coorDim, "error");
@@ -135,7 +135,7 @@ getIndicePairs(torch::Tensor indices, int64_t batchSize,
   }
 }
 
-  std::vector<torch::Tensor> getIndicePairs_mod(torch::Tensor indices, // [N_points, Ndim]
+  std::vector<torch::Tensor> getIndicePairs_mod(torch::Tensor indices,
                                                int64_t batchSize,
                                                std::vector<int64_t> outSpatialShape,
                                                std::vector<int64_t> spatialShape,
@@ -151,11 +151,11 @@ getIndicePairs(torch::Tensor indices, int64_t batchSize,
     // auto timer = spconv::CudaContextTimer<>();
     bool subM = _subM != 0;
     bool transpose = _transpose != 0;
-    auto NDim = kernelSize.size(); //kernel维数
+    auto NDim = kernelSize.size();
     // CPU always use hash (tsl::robin_map).
     bool useHash = _useHash != 0 || indices.device().type() == torch::kCPU;
     auto numAct = indices.size(0);
-    auto coorDim = indices.size(1) - 1; // batchIdx + xyz
+    auto coorDim = indices.size(1) - 1;
 
     TV_ASSERT_RT_ERR(NDim == coorDim, "error");
     TV_ASSERT_RT_ERR(kernelSize.size() == coorDim, "error");
@@ -165,7 +165,7 @@ getIndicePairs(torch::Tensor indices, int64_t batchSize,
     TV_ASSERT_RT_ERR(outPadding.size() == coorDim, "error");
     TV_ASSERT_RT_ERR(dilation.size() == coorDim, "error");
 
-    // 卷积采样点的个数
+
     auto kernelVolume = kernelSize[0];
     for (int i = 1; i < kernelSize.size(); ++i)
     {
@@ -173,7 +173,7 @@ getIndicePairs(torch::Tensor indices, int64_t batchSize,
     }
     TV_ASSERT_RT_ERR(kernelVolume <= 4096, "error");
 
-    // 单个输出featuremap体积
+
     auto outputVolume = outSpatialShape[0];
     for (int i = 1; i < outSpatialShape.size(); ++i)
     {
@@ -183,27 +183,27 @@ getIndicePairs(torch::Tensor indices, int64_t batchSize,
                      "due to limits of cuda hash, the volume of dense space "
                      "include batch size must less than std::numeric_limits<int>::max() = 2e9");
 
-    // each point in kernel corresponds to at most numAct output points
-    // indicePairs[:, k, n] means the nth mapping of kth point in kernel
-    // TODO: most points have far less output points!
-    torch::Tensor indicePairs = torch::full({2, kernelVolume / 2 + 1, numAct}, -1,
+
+
+
+    torch::Tensor indicePairs = torch::full({2, kernelVolume / 2, numAct}, -1,
                                             torch::dtype(torch::kInt32).device(indices.device()));
-    // indiceNum[k] means the num of output points correspond to kth kernel point
+
     torch::Tensor indiceNum = torch::zeros({kernelVolume},
                                            torch::dtype(torch::kInt32).device(indices.device()));
 
-    auto gridSize = batchSize * outputVolume; // 输出featuremap体积
+    auto gridSize = batchSize * outputVolume;
     if (useHash)
     {
       gridSize = batchSize;
     }
     torch::Tensor gridOut = torch::full({gridSize}, -1, torch::dtype(torch::kInt32).device(indices.device()));
-    gridOut = gridOut.view({batchSize, -1}); // it is only used to infer batchsize on cpu???
+    gridOut = gridOut.view({batchSize, -1});
 
     int64_t numActOut = -1;
     for (int i = 0; i < NDim; ++i)
     {
-      if (subM) // subM conv only support stride==1 and padding==ksize/2? why？
+      if (subM)
       {
         padding[i] = kernelSize[i] / 2;
         stride[i] = 1;
@@ -232,8 +232,112 @@ getIndicePairs(torch::Tensor indices, int64_t batchSize,
           indiceNum = indiceNum.to({torch::kCPU});
           indices = indices.to({torch::kCPU});
           numActOut = create_submconv_indice_pair_cpu_mod(indices, gridOut, indicePairs, indiceNum,
-                                                      kernelSize, stride, padding, dilation,
-                                                      outSpatialShape, transpose, false, useHash);
+                                                          kernelSize, stride, padding, dilation,
+                                                          outSpatialShape, transpose, false, useHash);
+          return {indices.to(device), indicePairs.to(device), indiceNum.to(device)};
+        }
+      }
+#endif
+      else {
+        TV_THROW_INVALID_ARG("unknown device type");
+      }
+      // tv::ssprint("subm", timer.report() / 1000.0);
+      return {indices, indicePairs, indiceNum};
+    } else {
+      TV_THROW_INVALID_ARG("only support subM conv yet!");
+    }
+  }
+
+  std::vector<torch::Tensor> getIndicePairs_mod2(torch::Tensor indices,
+                                                 int64_t batchSize,
+                                                 std::vector<int64_t> outSpatialShape,
+                                                 std::vector<int64_t> spatialShape,
+                                                 std::vector<int64_t> kernelSize,
+                                                 std::vector<int64_t> stride,
+                                                 std::vector<int64_t> padding,
+                                                 std::vector<int64_t> dilation,
+                                                 std::vector<int64_t> outPadding,
+                                                 int64_t _subM,
+                                                 int64_t _transpose,
+                                                 int64_t _useHash) {
+    // auto timer = spconv::CudaContextTimer<>();
+    bool subM = _subM != 0;
+    bool transpose = _transpose != 0;
+    auto NDim = kernelSize.size();
+    // CPU always use hash (tsl::robin_map).
+    bool useHash = _useHash != 0 || indices.device().type() == torch::kCPU;
+    auto numAct = indices.size(0);
+    auto coorDim = indices.size(1) - 1;
+
+    TV_ASSERT_RT_ERR(NDim == coorDim, "error");
+    TV_ASSERT_RT_ERR(kernelSize.size() == coorDim, "error");
+    TV_ASSERT_RT_ERR(outSpatialShape.size() == coorDim, "error");
+    TV_ASSERT_RT_ERR(stride.size() == coorDim, "error");
+    TV_ASSERT_RT_ERR(padding.size() == coorDim, "error");
+    TV_ASSERT_RT_ERR(outPadding.size() == coorDim, "error");
+    TV_ASSERT_RT_ERR(dilation.size() == coorDim, "error");
+
+
+    auto kernelVolume = kernelSize[0];
+    for (int i = 1; i < kernelSize.size(); ++i) {
+      kernelVolume *= kernelSize[i];
+    }
+    TV_ASSERT_RT_ERR(kernelVolume <= 4096, "error");
+
+
+    auto outputVolume = outSpatialShape[0];
+    for (int i = 1; i < outSpatialShape.size(); ++i) {
+      outputVolume *= outSpatialShape[i];
+    }
+    TV_ASSERT_RT_ERR(batchSize *outputVolume<std::numeric_limits<int>::max(),
+                         "due to limits of cuda hash, the volume of dense space "
+                         "include batch size must less than std::numeric_limits<int>::max() = 2e9");
+
+
+
+
+
+
+    torch::Tensor indicePairs;
+
+    torch::Tensor indiceNum = torch::zeros({kernelVolume},
+                                           torch::dtype(torch::kInt32).device(indices.device()));
+
+    auto gridSize = batchSize * outputVolume;
+    if (useHash) {
+      gridSize = batchSize;
+    }
+    torch::Tensor gridOut = torch::full({gridSize}, -1, torch::dtype(torch::kInt32).device(indices.device()));
+    gridOut = gridOut.view({batchSize, -1});
+
+    int64_t numActOut = -1;
+    for (int i = 0; i < NDim; ++i) {
+      if (subM)
+      {
+        padding[i] = kernelSize[i] / 2;
+        stride[i] = 1;
+      }
+    }
+
+    if (subM) {
+      if (indices.device().type() == torch::kCPU) {
+        numActOut = create_submconv_indice_pair_cpu_mod2(indices, gridOut, indicePairs, indiceNum,
+                                                         kernelSize, stride, padding, dilation,
+                                                         outSpatialShape, transpose, false, useHash);
+      }
+#ifdef TV_CUDA
+      else if (indices.device().type() == torch::kCUDA) {
+        numActOut = create_submconv_indice_pair_cuda_mod2(indices, gridOut, indicePairs, indiceNum,
+                                                          kernelSize, stride, padding, dilation,
+                                                          outSpatialShape, transpose, false, useHash);
+        if (numActOut == -1) {
+          std::cout << "cuda hash failed!" << std::endl;
+          auto device = indices.device();
+          indiceNum = indiceNum.to({torch::kCPU});
+          indices = indices.to({torch::kCPU});
+          numActOut = create_submconv_indice_pair_cpu_mod2(indices, gridOut, indicePairs, indiceNum,
+                                                           kernelSize, stride, padding, dilation,
+                                                           outSpatialShape, transpose, false, useHash);
           return {indices.to(device), indicePairs.to(device), indiceNum.to(device)};
         }
       }
@@ -290,11 +394,11 @@ torch::Tensor indiceConv(torch::Tensor features, torch::Tensor filters,
   // init for subM
   int indicePairMaxOffset = kernelVolume / 2;
   int indicePairMaxSize = numActOut;
-  if (subM) { // the center index of subm conv don't need gather and scatter
-    // add.
+  if (subM) {
+
     torch::mm_out(output, features, filters[indicePairMaxOffset]);
 
-    // get indice pair second max size based on subM symmetric property
+
     indicePairMaxSize =
       *std::max_element(indicePairNumCpu.data_ptr<int>(),
                         indicePairNumCpu.data_ptr<int>() + indicePairMaxOffset);
@@ -367,10 +471,10 @@ torch::Tensor indiceConv(torch::Tensor features, torch::Tensor filters,
   return output;
 }
 
-  torch::Tensor indiceConv_mod(torch::Tensor features,    // [NumAct, channel]
-                              torch::Tensor filters,     // [3, 3, 3, in_channel, out_channel]
-                              torch::Tensor indicePairs, // [2, kernelVolume/2+1, NumAct]
-                              torch::Tensor indiceNum,   // [KernelVolume]
+  torch::Tensor indiceConv_mod(torch::Tensor features,
+                              torch::Tensor filters,
+                              torch::Tensor indicePairs,
+                              torch::Tensor indiceNum,
                               int64_t numActOut,
                               int64_t _inverse,
                               int64_t _subM,
@@ -408,19 +512,19 @@ torch::Tensor indiceConv(torch::Tensor features, torch::Tensor filters,
 
     auto options = torch::TensorOptions().dtype(features.dtype()).device(features.device());
     torch::Tensor output = torch::zeros({numActOut, numOutPlanes}, options);
-    filters = filters.view({-1, numInPlanes, numOutPlanes}); // [3*3*3, in_channels, out_channels]
+    filters = filters.view({-1, numInPlanes, numOutPlanes});
 
     // init for subM
     int indicePairMaxOffset = kernelVolume / 2;
     int indicePairMaxSize = numActOut;
     if (subM)
-    { // the center index of subm conv don't need gather and scatter add.
-      // each input point always corresponds to a output point
-      // so the center point of a filter will always be multiplied to all input points
+    {
+
+
       torch::mm_out(output, features, filters[indicePairMaxOffset]);
 
-      // get indice pair second max size based on subM symmetric property
-      // pretty smart
+
+
       indicePairMaxSize = *std::max_element(indicePairNumCpu.data_ptr<int>(),
                                             indicePairNumCpu.data_ptr<int>() + indicePairMaxOffset);
       if (indicePairMaxSize == 0)
@@ -435,7 +539,7 @@ torch::Tensor indiceConv(torch::Tensor features, torch::Tensor filters,
                                             indicePairNumCpu.data_ptr<int>() + kernelVolume);
     }
 
-    // it's like a cache space, the following operations can reuse it without reallocate new memeory
+
     torch::Tensor inputBuffer = torch::empty({indicePairMaxSize, numInPlanes}, options);
     torch::Tensor outputBuffer = torch::empty({indicePairMaxSize, numOutPlanes}, options);
 
@@ -456,7 +560,7 @@ torch::Tensor indiceConv(torch::Tensor features, torch::Tensor filters,
       {
         continue;
       }
-      // TODO: torch::from_blob is a little slow
+
       auto inputBufferBlob = torch::from_blob(inputBuffer.data_ptr(), {nHot, numInPlanes}, options);
       auto outputBufferBlob = torch::from_blob(outputBuffer.data_ptr(), {nHot, numOutPlanes}, options);
 
@@ -464,7 +568,7 @@ torch::Tensor indiceConv(torch::Tensor features, torch::Tensor filters,
       {
         if (i <= indicePairMaxOffset)
         {
-          // gather the input features for the ith kernel point
+
           sparse_gather_cpu(inputBuffer, features, indicePairs[inverse][i], nHot);
         }
         else
@@ -503,7 +607,7 @@ torch::Tensor indiceConv(torch::Tensor features, torch::Tensor filters,
       if (device == torch::kCPU)
       {
         if (i <= indicePairMaxOffset)
-        { // add the calculated features to the corresponding output points
+        {
           sparse_scatter_add_cpu(outputBuffer, output, indicePairs[!inverse][i], nHot);
         }
         else

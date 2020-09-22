@@ -73,7 +73,7 @@ class SparseConvolution(SparseModule):
                  fused_bn=False,
                  use_hash=False,
                  algo=ops.ConvAlgo.Native,
-                 v2=False):
+                 version='orig'):
         super(SparseConvolution, self).__init__()
         assert groups == 1
         if not isinstance(kernel_size, (list, tuple)):
@@ -107,7 +107,7 @@ class SparseConvolution(SparseModule):
         self.fused_bn = fused_bn
         self.use_hash = use_hash
         self.algo = algo.value
-        self.v2=v2
+        self.version = version
 
         self.weight = Parameter(
             torch.Tensor(*kernel_size, in_channels, out_channels))
@@ -181,7 +181,7 @@ class SparseConvolution(SparseModule):
                     self.transposed,
                     grid=input.grid,
                     use_hash=self.use_hash,
-                    v2=self.v2)
+                    version=self.version)
                 input.indice_dict[self.indice_key] = (outids, indices,
                                                       indice_pairs,
                                                       indice_pair_num,
@@ -199,7 +199,7 @@ class SparseConvolution(SparseModule):
                 out_features = Fsp.indice_subm_conv(features, self.weight,
                                                     indice_pairs.to(device),
                                                     indice_pair_num,
-                                                    outids.shape[0], self.algo, self.v2)
+                                                    outids.shape[0], self.algo, self.version)
             else:
                 if self.inverse:
                     out_features = Fsp.indice_inverse_conv(
@@ -405,8 +405,8 @@ class SubMConv2d(SparseConvolution):
                  bias=True,
                  indice_key=None,
                  use_hash=False,
-                 algo=ops.ConvAlgo.Native, 
-                 v2=False):
+                 algo=ops.ConvAlgo.Native,
+                 version='orig'):
         super(SubMConv2d, self).__init__(2,
                                          in_channels,
                                          out_channels,
@@ -420,7 +420,7 @@ class SubMConv2d(SparseConvolution):
                                          indice_key=indice_key,
                                          use_hash=use_hash,
                                          algo=algo,
-                                         v2=v2)
+                                         version=version)
 
 
 class SubMConv3d(SparseConvolution):
@@ -436,7 +436,7 @@ class SubMConv3d(SparseConvolution):
                  indice_key=None,
                  use_hash=False,
                  algo=ops.ConvAlgo.Native,
-                 v2=False):
+                 version='orig'):
         super(SubMConv3d, self).__init__(3,
                                          in_channels,
                                          out_channels,
@@ -450,7 +450,7 @@ class SubMConv3d(SparseConvolution):
                                          indice_key=indice_key,
                                          use_hash=use_hash,
                                          algo=algo,
-                                         v2=v2)
+                                         version=version)
 
 
 class SubMConv4d(SparseConvolution):
@@ -466,7 +466,7 @@ class SubMConv4d(SparseConvolution):
                  indice_key=None,
                  use_hash=False,
                  algo=ops.ConvAlgo.Native,
-                 v2=False):
+                 version='orig'):
         super(SubMConv4d, self).__init__(4,
                                          in_channels,
                                          out_channels,
@@ -480,4 +480,4 @@ class SubMConv4d(SparseConvolution):
                                          indice_key=indice_key,
                                          use_hash=use_hash,
                                          algo=algo,
-                                         v2=v2)
+                                         version=version)

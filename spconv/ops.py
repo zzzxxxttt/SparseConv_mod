@@ -63,7 +63,7 @@ def get_indice_pairs(indices,
                      transpose=False,
                      grid=None,
                      use_hash=False,
-                     v2=False):
+                     version='orig'):
     ndim = indices.shape[1] - 1
     if not isinstance(ksize, (list, tuple)):
         ksize = [ksize] * ndim
@@ -89,10 +89,14 @@ def get_indice_pairs(indices,
     else:
         out_shape = spatial_shape
     if grid is None:
-        if not v2:
-            get_indice_pairs_func=torch.ops.spconv.get_indice_pairs
+        if version == 'orig':
+            get_indice_pairs_func = torch.ops.spconv.get_indice_pairs
+        elif version == 'mod1':
+            get_indice_pairs_func = torch.ops.spconv.get_indice_pairs_mod
+        elif version == 'mod2':
+            get_indice_pairs_func = torch.ops.spconv.get_indice_pairs_mod2
         else:
-            get_indice_pairs_func=torch.ops.spconv.get_indice_pairs_mod
+            raise NotImplementedError
 
         res = get_indice_pairs_func(indices, batch_size, out_shape,
                                     spatial_shape, ksize, stride,
@@ -121,14 +125,16 @@ def indice_conv(features,
                 inverse=False,
                 subm=False,
                 algo=ConvAlgo.Native.value,
-                v2=False):
-    if not v2:
-        indice_func=torch.ops.spconv.indice_conv
+                version='orig'):
+    if version == 'orig':
+        indice_func = torch.ops.spconv.indice_conv
+    elif version == 'mod1' or version == 'mod2':
+        indice_func = torch.ops.spconv.indice_conv_mod
     else:
-        indice_func=torch.ops.spconv.indice_conv_mod
+        raise NotImplementedError
     return indice_func(features, filters, indice_pairs,
-                                        indice_pair_num, num_activate_out,
-                                        int(inverse), int(subm), algo)
+                       indice_pair_num, num_activate_out,
+                       int(inverse), int(subm), algo)
 
 
 def fused_indice_conv(features, filters, bias, indice_pairs, indice_pair_num,
@@ -147,14 +153,16 @@ def indice_conv_backward(features,
                          inverse=False,
                          subm=False,
                          algo=ConvAlgo.Native.value,
-                         v2=False):
-    if not v2:
-        indice_func=torch.ops.spconv.indice_conv_backward
+                         version='orig'):
+    if version == 'orig':
+        indice_func = torch.ops.spconv.indice_conv_backward
+    elif version == 'mod1' or version == 'mod2':
+        indice_func = torch.ops.spconv.indice_conv_backward_mod
     else:
-        indice_func=torch.ops.spconv.indice_conv_backward_mod
+        raise NotImplementedError
     return indice_func(features, filters, out_bp,
-                                                 indice_pairs, indice_pair_num,
-                                                 int(inverse), int(subm), algo)
+                       indice_pairs, indice_pair_num,
+                       int(inverse), int(subm), algo)
 
 
 def indice_maxpool(features, indice_pairs, indice_pair_num, num_activate_out):
