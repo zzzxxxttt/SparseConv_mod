@@ -32,11 +32,15 @@ sparsity 90%,
 output channels: 32,
 batchsize: 4
 
+**use_hash = False**
+
 |     version     | GPU memory | imgs/s |
 | :-------------: | :--------: | :----: |
 | original spconv |   6473MB   |  56.3  |
 |      mod1       |   4471MB   |  59.2  |
 |      mod2       |   4083MB   |  43.8  |
+
+**use_hash = True**
 
 |     version     | GPU memory | imgs/s |
 | :-------------: | :--------: | :----: |
