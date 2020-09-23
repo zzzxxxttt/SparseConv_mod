@@ -1,6 +1,6 @@
 # SpConv_mod
 
-This is a small mod of [spconv](https://github.com/traveller59/spconv) which uses less memory.
+This is a small modification of [spconv](https://github.com/traveller59/spconv) which uses less memory.
 
 ## Install
 
@@ -13,12 +13,12 @@ Just add ```version = "mod1"``` or  ```version = "mod2"```to the subM convolutio
 ```Python
 import spconv
 layer = spconv.SubMConv3d(in_channels = 1,
-                          out_channels=32,
-                          kernel_size=3,
+                          out_channels = 32,
+                          kernel_size = 3,
                           stride = 1,
                           padding = 1,
                           use_hash = False,
-                          version='mod1') # or "mod2"
+                          version = "mod1") # or "mod2"
 ```
 
 #### notice
@@ -28,6 +28,7 @@ layer = spconv.SubMConv3d(in_channels = 1,
 ## Comparison
 
 input resolution:  1600 x 1600 x 40 x 1,
+sparsity 90%,
 output channels: 32,
 batchsize: 4
 
